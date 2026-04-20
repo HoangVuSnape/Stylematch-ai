@@ -19,6 +19,18 @@ The application is deployed and ready to test!
 
 ---
 
+## 📚 Technical Docs
+
+Structured internal documentation is available in [`docs/`](docs/):
+
+1. [`00_Project_Overview.md`](docs/00_Project_Overview.md)
+2. [`01_Repository_Contents.md`](docs/01_Repository_Contents.md)
+3. [`02_End_to_End_Workflow.md`](docs/02_End_to_End_Workflow.md)
+4. [`03_Data_and_Embedding_Pipeline.md`](docs/03_Data_and_Embedding_Pipeline.md)
+5. [`04_Operations_and_Next_Steps.md`](docs/04_Operations_and_Next_Steps.md)
+
+---
+
 ## 📖 The Problem: Why "Traditional" isn't enough?
 
 Most traditional recommendation systems (like those used by Amazon or Netflix 10 years ago) rely on **Collaborative Filtering**—analyzing who bought what. While powerful, this approach has a major flaw:

@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import os
+import requests
+import io
 from PIL import Image
-import torch
-from transformers import CLIPProcessor, CLIPModel
 
 # --- 1. PAGE CONFIGURATION ---
 st.set_page_config(
@@ -57,50 +57,52 @@ st.markdown("""
 # --- 3. PATH SETUP ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(BASE_DIR, "articles.csv")
-EMBEDDINGS_PATH = os.path.join(BASE_DIR, "embeddings.npy")
 IDS_PATH = os.path.join(BASE_DIR, "ids.npy")
 
-# --- 4. LOAD AI ENGINE ---
-@st.cache_resource
-def load_model():
-    model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-    processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-    return model, processor
+# Backend API server address (chạy trong Notebook cell)
+BACKEND_URL = "http://localhost:5001"
 
+# --- 4. LOAD LIGHTWEIGHT DATA (No model needed!) ---
 @st.cache_data
 def load_database():
-    if not os.path.exists(EMBEDDINGS_PATH):
-        return None, None, None
-    embeddings = np.load(EMBEDDINGS_PATH)
+    if not os.path.exists(IDS_PATH) or not os.path.exists(CSV_PATH):
+        return None, None
     ids = np.load(IDS_PATH, allow_pickle=True)
     df = pd.read_csv(CSV_PATH, dtype={'article_id': str})
-    return embeddings, ids, df
+    return ids, df
 
-# Load silently in background
-model, processor = load_model()
-embeddings, item_ids, df = load_database()
+item_ids, df = load_database()
 
-# --- 5. LOGIC & FUNCTIONS ---
+# --- 5. LOGIC: Gọi API Backend để tìm ảnh tương tự ---
 def get_image_path(article_id):
-    # Smart path finding (checks nested and flat structures)
     subfolder = article_id[:3]
     path_nested = os.path.join(BASE_DIR, "images", subfolder, article_id + ".jpg")
     path_root = os.path.join(BASE_DIR, subfolder, article_id + ".jpg")
-    
     if os.path.exists(path_nested): return path_nested
     if os.path.exists(path_root): return path_root
     return None
 
 def find_similar_items(image, top_k=5):
-    inputs = processor(images=image, return_tensors="pt", padding=True)
-    with torch.no_grad():
-        query_vector = model.get_image_features(**inputs)
-        query_vector = query_vector / query_vector.norm(p=2, dim=-1, keepdim=True)
-        query_vector = query_vector.numpy()
-    
-    scores = np.dot(query_vector, embeddings.T).flatten()
-    top_indices = np.argsort(scores)[-top_k:][::-1]
-    return top_indices, scores
+    """Gửi ảnh tới Backend API server (đang chạy ở Notebook cell) để inference."""
+    img_bytes = io.BytesIO()
+    image.save(img_bytes, format='JPEG')
+    img_bytes.seek(0)
+
+    try:
+        response = requests.post(
+            f"{BACKEND_URL}/search",
+            files={'image': ('query.jpg', img_bytes, 'image/jpeg')},
+            data={'top_k': top_k},
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.json()  # list of {index, id, score, name}
+    except requests.exceptions.ConnectionError:
+        st.error("❌ Không kết nối được Backend! Hãy chắc chắn đã chạy Cell 'Load Model & Start Backend' trên Colab trước.")
+        return None
+    except Exception as e:
+        st.error(f"❌ Lỗi gọi Backend: {e}")
+        return None
 
 # --- 6. THE UI LAYOUT ---
 
@@ -109,8 +111,8 @@ st.markdown("<h1>✨ StyleMatch AI</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #BBBBBB; margin-bottom: 40px;'>Visual Search Engine powered by OpenAI CLIP</p>", unsafe_allow_html=True)
 
 # Main Container
-if embeddings is None:
-    st.error("⚠️ Database missing! Check repo files.")
+if item_ids is None:
+    st.error("⚠️ Database missing! Check repo files (ids.npy, articles.csv).")
 else:
     # Sidebar for Upload
     with st.sidebar:
@@ -121,10 +123,12 @@ else:
         st.markdown("### 💡 How it works")
         st.info(
             "This app doesn't use simple tags. "
-            "It uses **Computer Vision** to understand "
+            "It uses **Computer Vision** (CLIP) to understand "
             "texture, shape, and style to find "
             "visually similar matches."
         )
+        st.markdown("---")
+        st.caption("Model chạy trên Colab Backend (Cell riêng)")
 
     # Main Content Area
     if uploaded_file:
@@ -133,54 +137,55 @@ else:
         with col1:
             st.subheader("Your Query")
             user_image = Image.open(uploaded_file).convert("RGB")
-            st.image(user_image, use_column_width=True, caption="Analyzed Pattern")
+            st.image(user_image, use_container_width=True, caption="Analyzed Pattern")
             
             if st.button("🔍 Search Database", type="primary", use_container_width=True):
-                with st.spinner("Scanning 5,000+ items..."):
-                    indices, scores = find_similar_items(user_image)
-                    st.session_state['results'] = (indices, scores)
+                with st.spinner("🧠 Đang gửi ảnh tới AI Backend để phân tích..."):
+                    results = find_similar_items(user_image)
+                    if results is not None:
+                        st.session_state['results'] = results
 
         with col2:
             st.subheader("Top Recommendations")
-            if 'results' in st.session_state:
-                indices, scores = st.session_state['results']
+            if 'results' in st.session_state and st.session_state['results']:
+                results = st.session_state['results']
                 
-                # Show results in a clean grid
-                cols = st.columns(3) # 3 items per row
-                for i, idx in enumerate(indices[:3]):
+                # Show results in a clean grid - Row 1 (3 items)
+                cols = st.columns(3)
+                for i, item in enumerate(results[:3]):
                     with cols[i]:
-                        rec_id = item_ids[idx]
-                        score = scores[idx]
-                        meta = df[df['article_id'] == rec_id].iloc[0]
+                        rec_id = item['id']
+                        score = item['score']
+                        name = item['name']
                         
                         img_path = get_image_path(rec_id)
                         if img_path:
-                            st.image(img_path, use_column_width=True)
-                            st.markdown(f"**{meta.get('prod_name', 'Item')}**")
+                            st.image(img_path, use_container_width=True)
+                            st.markdown(f"**{name}**")
                             st.caption(f"Match Score: {int(score*100)}%")
                         else:
-                            st.warning("Image Missing")
+                            st.warning(f"Image Missing: {rec_id}")
 
                 # Second row for remaining items
-                cols_2 = st.columns(3)
-                for i, idx in enumerate(indices[3:5]): # Next 2 items
-                    with cols_2[i]:
-                        rec_id = item_ids[idx]
-                        score = scores[idx]
-                        meta = df[df['article_id'] == rec_id].iloc[0]
-                        
-                        img_path = get_image_path(rec_id)
-                        if img_path:
-                            st.image(img_path, use_column_width=True)
-                            st.markdown(f"**{meta.get('prod_name', 'Item')}**")
-                            st.caption(f"Match Score: {int(score*100)}%")
+                if len(results) > 3:
+                    cols_2 = st.columns(3)
+                    for i, item in enumerate(results[3:5]):
+                        with cols_2[i]:
+                            rec_id = item['id']
+                            score = item['score']
+                            name = item['name']
+                            
+                            img_path = get_image_path(rec_id)
+                            if img_path:
+                                st.image(img_path, use_container_width=True)
+                                st.markdown(f"**{name}**")
+                                st.caption(f"Match Score: {int(score*100)}%")
             else:
                 st.info("👈 Upload an image in the sidebar to begin.")
     
     else:
-        # Welcome State (No image uploaded yet)
+        # Welcome State
         st.markdown("<div class='upload-text'>waiting for input...</div>", unsafe_allow_html=True)
-        # Display some random examples from your dataset as "Inspiration"
         st.subheader("Explore the Collection")
         example_cols = st.columns(5)
         random_indices = np.random.choice(len(item_ids), 5)
@@ -188,4 +193,4 @@ else:
             with example_cols[i]:
                 rec_id = item_ids[idx]
                 path = get_image_path(rec_id)
-                if path: st.image(path, use_column_width=True)
+                if path: st.image(path, use_container_width=True)
