@@ -6,6 +6,5 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - COLAB_URL=https://your-unique-id.ngrok-free.app # Thay URL ngrok từ Colab vào đây
       - PORT=8000
     restart: always

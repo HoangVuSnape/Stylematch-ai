@@ -3,10 +3,12 @@ import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import logging
-
+from dotenv import load_dotenv # Thêm dòng này
+# Load variables from .env file
+load_dotenv() # Thêm dòng này
 # --- Configuration ---
 # This URL will be the ngrok URL from Colab
-COLAB_URL = os.getenv("COLAB_URL", "http://your-ngrok-url.ngrok-free.app")
+COLAB_URL = os.getenv("COLAB_URL")
 PORT = int(os.getenv("PORT", 8000))
 
 logging.basicConfig(level=logging.INFO)

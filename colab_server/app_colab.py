@@ -93,6 +93,15 @@ def search():
         
         with torch.no_grad():
             image_features = model.get_image_features(**inputs)
+            
+            # Robustness: Handle cases where CLIP might return an output object instead of a raw tensor
+            if not isinstance(image_features, torch.Tensor):
+                image_features = image_features.pooler_output if hasattr(image_features, 'pooler_output') else image_features[0]
+                
+                # Apply visual projection if it exists and dimension doesn't match expected CLIP embedding size
+                if hasattr(model, 'visual_projection') and image_features.shape[-1] != 512:
+                    image_features = model.visual_projection(image_features)
+
             # Normalize
             image_features = image_features / image_features.norm(p=2, dim=-1, keepdim=True)
             query_vector = image_features.cpu().numpy()
