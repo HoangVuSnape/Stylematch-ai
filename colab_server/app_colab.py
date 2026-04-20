@@ -9,11 +9,14 @@ import io
 import logging
 import threading
 
+# Because i just clone repo
+root= "/content/Stylematch-ai"
+
 # --- Configuration ---
 MODEL_NAME = "openai/clip-vit-base-patch32"
-EMBEDDINGS_FILE = "embeddings.npy"
-IDS_FILE = "ids.npy"
-METADATA_FILE = "articles.csv"
+EMBEDDINGS_FILE = root + "/embeddings.npy"
+IDS_FILE = root + "/ids.npy"
+METADATA_FILE = root + "/articles.csv"
 DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1491031437288280146/B5xnLJ_qxU_nxL63GnzUmSvhCHGMw9Dxv5SzxQLyBJVs0V-Y2Jf22y2svv6DLiqPRti5"
 
 # --- Global State for Logging ---

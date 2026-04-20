@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir -r requirements_local.txt
 COPY app_local.py .
 
 # Environment variables
-ENV COLAB_URL=http://your-ngrok-url.ngrok-free.app
+ENV COLAB_URL=https://f79f-34-147-69-24.ngrok-free.app
 ENV PORT=8000
 
 EXPOSE 8000
